@@ -12,7 +12,7 @@ pub enum DisplayEvent {
 
 pub struct Display {
     canvas: sdl2::render::WindowCanvas,
-    pub event_pump: sdl2::EventPump,
+    event_pump: sdl2::EventPump,
 
     pixel_width: u32,
     pixel_height: u32,
