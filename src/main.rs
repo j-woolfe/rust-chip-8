@@ -1,10 +1,9 @@
+mod constants;
 mod display;
 
+use crate::constants::*;
 use crate::display::Display;
-use crate::display::DisplayEvent;
-use std::time::Duration;
-
-
+use std::time::{Duration, Instant};
 
 struct Chip8 {
     // 4kb RAM
@@ -34,12 +33,15 @@ struct Chip8 {
     i: u16,
 
     // Stack and stack pointer
-    stack: [u8; 16],
+    stack: [u16; 16],
     sp: u8,
 
     // Delay and sound timers
     dt: u8,
     st: u8,
+
+    // Display
+    display: Display,
 }
 
 impl Chip8 {
@@ -68,6 +70,7 @@ impl Chip8 {
             sp: 0,
             dt: 0,
             st: 0,
+            display: Display::new(WINDOW_WIDTH, WINDOW_HEIGHT),
         };
 
         // Write font to 0x050 - 0x09F
@@ -87,70 +90,76 @@ impl Chip8 {
             0xF0, 0x80, 0x80, 0x80, 0xF0, // C
             0xE0, 0x90, 0x90, 0x90, 0xE0, // D
             0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-            0xF0, 0x80, 0xF0, 0x80, 0x80,  // F
-            ];
+            0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+        ];
 
-        cpu.write_array(&FONT, 0x050);
+        cpu.write_ram(&FONT, 0x050);
 
         // Return cpu
         cpu
     }
 
-    fn write_array(&mut self, array: &[u8], start_address: u16) {
+    fn write_ram(&mut self, array: &[u8], start_address: u16) {
         let mut index = start_address;
         for byte in array {
             self.ram[index as usize] = *byte;
             index += 1;
         }
-        
     }
+
+    fn execute_loop(&mut self) {
+        let mut start_time: Instant;
+        let mut since_last_step = Duration::new(0, 0);
+        let mut since_last_frame = Duration::new(0, 0);
+
+        let step_dt = Duration::new(0, 1_000_000_000u32 / INSTRUCT_PER_SEC);
+        let frame_dt = Duration::new(0, 1_000_000_000u32 / FRAME_RATE);
+
+        // // Draw checkerboard
+        // let mut toggle = false;
+        // for x in 0..64 {
+        //     for y in 0..32 {
+        //         self.display.set_pixel(x, y, toggle);
+        //         toggle = !toggle;
+        //     }
+        //     toggle = !toggle;
+        // }
+
+        'execution: loop {
+            start_time = Instant::now();
+
+            if self.display.check_quit() {
+                break 'execution;
+            };
+
+            since_last_step += start_time.elapsed();
+
+            if since_last_step >= step_dt {
+                self.step_cpu();
+                since_last_step -= step_dt;
+            }
+
+            since_last_frame += start_time.elapsed();
+
+            if since_last_frame >= frame_dt {
+                // // Flip checkerboard
+                // for x in 0..64 {
+                //     for y in 0..32 {
+                //         self.display.flip_pixel(x, y);
+                //     }
+                // }
+                self.display.draw_frame();
+                since_last_frame -= frame_dt;
+            }
+        }
+    }
+
+    fn step_cpu(&mut self) {}
 }
 
-
-
-
 fn main() {
+    let mut cpu = Chip8::new();
+    cpu.execute_loop();
 
-    let cpu = Chip8::new();
-
-    println!("{:x?}", cpu.ram);
-    
-
-
-
-    // static WINDOW_WIDTH: u32 = 640; 
-    // static WINDOW_HEIGHT: u32 = 320; 
-
-    // static FRAME_RATE: u32 = 60;
-
-
-    // // Initialise display
-    // let mut display = Display::new(WINDOW_WIDTH, WINDOW_HEIGHT);
-
-    // 'running: loop {
-    //     // Draw checkerboard
-    //     let mut toggle = false;
-    //     for x in 0..64 {
-    //         for y in 0..32 {
-    //             display.set_pixel(x, y, toggle);
-    //             toggle = !toggle;
-    //         }
-    //         toggle = !toggle;
-    //     }
-
-    //     // Process renderer events
-    //     for event in display.iter_events() {
-    //         match event {
-    //             DisplayEvent::Quit => break 'running,
-    //             DisplayEvent::Keypress => {},
-    //             _ => {}
-    //         }
-    //     }
-
-    //     // Rest of game loop goes here
-
-    //     display.draw_frame();
-
-    //     ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / FRAME_RATE));
-    // }
+    // println!("{:x?}", cpu.ram);
 }

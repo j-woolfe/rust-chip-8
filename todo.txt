@@ -1,0 +1,4 @@
+- Write function to import ROM into memory from file
+- Write Fetch
+- Write Decode
+- Write Execute
