@@ -119,12 +119,16 @@ impl Chip8 {
         }
     }
 
+    fn read_ram(&self, address: u16) -> u8 {
+        self.ram[address as usize]
+    }
+
     fn load_ram_from_file(&mut self, path: &Path) -> io::Result<()> {
         let mut buffer = Vec::new();
         let mut file = File::open(path)?;
 
         // Check file length is less than 4096 - 512 = 0xDFF bytes
-        match file.read(&mut buffer) {
+        match file.read_to_end(&mut buffer) {
             Ok(1..=3583) => self.write_ram(&buffer, 0x200),
             Ok(0) => panic!("Input file appears empty"),
             Ok(_) => panic!("Input file is too large, max size is 0xDFF bytes"),
@@ -198,5 +202,5 @@ fn main() {
     cpu.load_ram_from_file(program_path).expect("Failed to read file");
     cpu.execute_loop();
 
-    println!("{:x?}", cpu.ram);
+    // println!("{:x?}", cpu.ram);
 }
