@@ -3,13 +3,11 @@ mod display;
 
 use crate::constants::*;
 use crate::display::Display;
-use std::time::{Duration, Instant};
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::path::Path;
-
-
+use std::time::{Duration, Instant};
 
 #[allow(dead_code)]
 
@@ -18,24 +16,7 @@ struct Chip8 {
     pub ram: [u8; 4096],
 
     // General purpose registers
-    v0: u8,
-    v1: u8,
-    v2: u8,
-    v3: u8,
-    v4: u8,
-    v5: u8,
-    v6: u8,
-    v7: u8,
-    v8: u8,
-    v9: u8,
-    va: u8,
-    vb: u8,
-    vc: u8,
-    vd: u8,
-    ve: u8,
-
-    // Flag register
-    vf: u8,
+    v: [u8; 16],
 
     // Index register
     i: u16,
@@ -60,22 +41,7 @@ impl Chip8 {
         // Initialise empty Chip8
         let mut cpu = Chip8 {
             ram: [0; 4096],
-            v0: 0,
-            v1: 0,
-            v2: 0,
-            v3: 0,
-            v4: 0,
-            v5: 0,
-            v6: 0,
-            v7: 0,
-            v8: 0,
-            v9: 0,
-            va: 0,
-            vb: 0,
-            vc: 0,
-            vd: 0,
-            ve: 0,
-            vf: 0,
+            v: [0; 16],
             i: 0,
             pc: 0x200,
             stack: [0; 16],
@@ -119,8 +85,11 @@ impl Chip8 {
         }
     }
 
-    fn read_ram(&self, address: u16) -> u8 {
-        self.ram[address as usize]
+    fn read_instruction(&self, start_address: usize) -> u16 {
+        let upper = self.ram[start_address] as u16;
+        let lower = self.ram[start_address + 1] as u16;
+
+        (upper << 8) | lower
     }
 
     fn load_ram_from_file(&mut self, path: &Path) -> io::Result<()> {
@@ -132,9 +101,9 @@ impl Chip8 {
             Ok(1..=3583) => self.write_ram(&buffer, 0x200),
             Ok(0) => panic!("Input file appears empty"),
             Ok(_) => panic!("Input file is too large, max size is 0xDFF bytes"),
-            Err(m) => return Err(m)
+            Err(m) => return Err(m),
         }
-            
+
         Ok(())
     }
 
@@ -187,19 +156,139 @@ impl Chip8 {
 
     fn step_cpu(&mut self) {
         // Fetch
+        let instruction = self.read_instruction(self.pc.into());
+        self.pc += 2;
+
+        // Get instruction arguments
+        let op = (instruction & 0b1111_0000_0000_0000) >> 12;
+        let x = (instruction & 0b0000_1111_0000_0000) >> 8;
+        let y = (instruction & 0b0000_0000_1111_0000) >> 4;
+        let n = instruction & 0b0000_0000_0000_1111;
+        let nn = instruction & 0b0000_0000_1111_1111;
+        let nnn = instruction & 0b0000_1111_1111_1111;
 
         // Decode
+        match op {
+            0x0 => {
+                match instruction {
+                    0x00E0 => {
+                        // CLS
+                        self.cls();
+                    }
+                    0x00EE => {
+                        // RET
+                        // TODO
+                    }
+                    _ => {}
+                }
+            }
+
+            0x1 => {
+                // JP
+                self.jp(nnn);
+            }
+
+            0x6 => {
+                // LD immediate
+                self.ld_imm(x, nn as u8);
+            }
+
+            0x7 => {
+                // ADD immediate
+                self.add_imm(x, nn as u8);
+            }
+
+            0xA => {
+                // SET Index
+                self.set_i(nnn);
+            }
+
+            0xD => {
+                // DRW
+                self.drw(x, y, n);
+            }
+
+            _ => panic!("Reached unimplemented instruction"),
+        }
 
         // Execute
+    }
+
+    fn cls(&mut self) {
+        // 00E0 - CLS
+        // Clears the display
+        self.display.clear();
+    }
+
+    fn jp(&mut self, address: u16) {
+        // 1nnn - JP addr
+        // Sets program counter to nnn
+        self.pc = address;
+    }
+
+    fn ld_imm(&mut self, target_register: u16, imm_value: u8) {
+        // 6xnn - LD Vx, nn
+        // Loads the immediate value nn into register Vx
+        self.v[target_register as usize] = imm_value;
+    }
+
+    fn add_imm(&mut self, target_register: u16, imm_value: u8) {
+        // 7xnn - ADD Vx, nn
+        // Adds the value nn to register Vx and stores it in Vx
+        // Note: doesn't affect overflow flag
+        self.v[target_register as usize] += imm_value;
+    }
+
+    fn set_i(&mut self, address: u16) {
+        // Annn - LD I, addr
+        // Sets Index register to addr
+        self.i = address;
+    }
+
+    fn drw(&mut self, x_register: u16, y_register: u16, n_bytes: u16) {
+        // Get starting coordinates with appropriate wrapping
+        let x_coord = self.v[x_register as usize] % 64;
+        let y_coord = self.v[y_register as usize] % 32;
+
+        // Reset VF
+        self.v[0xF] = 0;
+        let mut set_vf = false;
+
+        // For every row of sprite data
+        for n in 0..n_bytes {
+            // Load data from ram
+            let sprite_data: u8 = self.ram[(self.i + n) as usize];
+
+            // For each bit in sprite row
+            for bit in 0..8 {
+                // Mask MSB and if set, flip pixel on display
+                if (sprite_data << bit) & 0b1000_0000 != 0 {
+                    set_vf |= self.display.flip_pixel(x_coord + bit, y_coord + n as u8);
+                }
+
+                if x_coord + bit > 63 {
+                    break
+                }
+            }
+
+            if y_coord + (n as u8) > 31 {
+                break
+            }
+        }
+
+        if set_vf {
+            self.v[0xF] = 1;
+        }
     }
 }
 
 fn main() {
     let mut cpu = Chip8::new();
-    
+
     let program_path = Path::new("ibm_logo.ch8");
 
-    cpu.load_ram_from_file(program_path).expect("Failed to read file");
+    cpu.load_ram_from_file(program_path)
+        .expect("Failed to read file");
     cpu.execute_loop();
 
     // println!("{:x?}", cpu.ram);

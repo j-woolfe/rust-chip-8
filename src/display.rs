@@ -50,7 +50,7 @@ impl Display {
 
         let mut canvas = window.into_canvas().build().unwrap();
 
-        canvas.set_draw_color(Color::RGB(255, 255, 255));
+        canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
         canvas.present();
 
@@ -76,9 +76,9 @@ impl Display {
         for (y, row) in self.buffer.iter_mut().enumerate() {
             for (x, element) in row.iter_mut().enumerate() {
                 if *element {
-                    self.canvas.set_draw_color(Color::RGB(0, 0, 0));
-                } else {
                     self.canvas.set_draw_color(Color::RGB(255, 255, 255));
+                } else {
+                    self.canvas.set_draw_color(Color::RGB(0, 0, 0));
                 }
 
                 self.canvas
@@ -95,8 +95,13 @@ impl Display {
         self.canvas.present();
     }
 
-    pub fn flip_pixel(&mut self, x: usize, y: usize) {
+    pub fn flip_pixel(&mut self, x: u8, y: u8) -> bool {
+        let x = x as usize;
+        let y = y as usize;
         self.buffer[y][x] = !self.buffer[y][x];
+
+        // Return true if pixel was turned off (is now on)
+        !self.buffer[y][x]
     }
 
     pub fn set_pixel(&mut self, x: usize, y: usize, value: bool) {
