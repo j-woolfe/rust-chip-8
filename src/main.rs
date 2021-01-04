@@ -4,6 +4,14 @@ mod display;
 use crate::constants::*;
 use crate::display::Display;
 use std::time::{Duration, Instant};
+use std::fs::File;
+use std::io;
+use std::io::prelude::*;
+use std::path::Path;
+
+
+
+#[allow(dead_code)]
 
 struct Chip8 {
     // 4kb RAM
@@ -31,6 +39,9 @@ struct Chip8 {
 
     // Index register
     i: u16,
+
+    // Program counter
+    pc: u16,
 
     // Stack and stack pointer
     stack: [u16; 16],
@@ -66,6 +77,7 @@ impl Chip8 {
             ve: 0,
             vf: 0,
             i: 0,
+            pc: 0x200,
             stack: [0; 16],
             sp: 0,
             dt: 0,
@@ -105,6 +117,21 @@ impl Chip8 {
             self.ram[index as usize] = *byte;
             index += 1;
         }
+    }
+
+    fn load_ram_from_file(&mut self, path: &Path) -> io::Result<()> {
+        let mut buffer = Vec::new();
+        let mut file = File::open(path)?;
+
+        // Check file length is less than 4096 - 512 = 0xDFF bytes
+        match file.read(&mut buffer) {
+            Ok(1..=3583) => self.write_ram(&buffer, 0x200),
+            Ok(0) => panic!("Input file appears empty"),
+            Ok(_) => panic!("Input file is too large, max size is 0xDFF bytes"),
+            Err(m) => return Err(m)
+        }
+            
+        Ok(())
     }
 
     fn execute_loop(&mut self) {
@@ -154,12 +181,22 @@ impl Chip8 {
         }
     }
 
-    fn step_cpu(&mut self) {}
+    fn step_cpu(&mut self) {
+        // Fetch
+
+        // Decode
+
+        // Execute
+    }
 }
 
 fn main() {
     let mut cpu = Chip8::new();
+    
+    let program_path = Path::new("ibm_logo.ch8");
+
+    cpu.load_ram_from_file(program_path).expect("Failed to read file");
     cpu.execute_loop();
 
-    // println!("{:x?}", cpu.ram);
+    println!("{:x?}", cpu.ram);
 }
