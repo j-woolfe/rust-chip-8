@@ -5,7 +5,6 @@ use sdl2::keyboard::{Keycode, Scancode};
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 
-#[allow(dead_code)]
 
 
 pub enum ValidHex {
@@ -37,6 +36,7 @@ pub struct Display {
     buffer: [[bool; 64]; 32],
 }
 
+#[allow(dead_code)]
 impl Display {
     pub fn new(width: u32, height: u32) -> Display {
         let sdl_context = sdl2::init().unwrap();

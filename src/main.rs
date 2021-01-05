@@ -161,10 +161,10 @@ impl Chip8 {
 
         // Get instruction arguments
         let op = (instruction & 0b1111_0000_0000_0000) >> 12;
-        let x = (instruction & 0b0000_1111_0000_0000) >> 8;
-        let y = (instruction & 0b0000_0000_1111_0000) >> 4;
+        let x = ((instruction & 0b0000_1111_0000_0000) >> 8) as usize;
+        let y = ((instruction & 0b0000_0000_1111_0000) >> 4) as usize;
         let n = instruction & 0b0000_0000_0000_1111;
-        let nn = instruction & 0b0000_0000_1111_1111;
+        let nn = (instruction & 0b0000_0000_1111_1111) as u8;
         let nnn = instruction & 0b0000_1111_1111_1111;
 
         // Decode
@@ -175,6 +175,7 @@ impl Chip8 {
                         // CLS
                         self.cls();
                     }
+
                     0x00EE => {
                         // RET
                         // TODO
@@ -188,14 +189,80 @@ impl Chip8 {
                 self.jp(nnn);
             }
 
+            0x3 => {
+                // SE immediate
+                self.se_imm(x, nn);
+            }
+
+            0x4 => {
+                // SNE immediate
+                self.sne_imm(x, nn);
+            }
+
+            0x5 => {
+                // SE
+                self.se(x, y)
+            }
+
             0x6 => {
                 // LD immediate
-                self.ld_imm(x, nn as u8);
+                self.ld_imm(x, nn);
             }
 
             0x7 => {
                 // ADD immediate
-                self.add_imm(x, nn as u8);
+                self.add_imm(x, nn);
+            }
+
+            0x8 => {
+                match n {
+                    0x0 => {
+                        // LD
+                        self.ld(x, y);
+                    }
+
+                    0x1 => {
+                        // OR
+                        self.or(x, y);
+                    }
+
+                    0x2 => {
+                        // AND
+                        self.and(x, y);
+                    }
+
+                    0x3 => {
+                        // XOR
+                        self.xor(x, y);
+                    }
+
+                    0x4 => {
+                        // ADD
+                        self.add(x, y);
+                    }
+
+                    0x5 => {
+                        // SUB
+                        self.sub(x, y);
+                    }
+
+                    0x6 => {
+                        // SHR
+                        self.shr(x);
+                    }
+
+                    0x7 => {
+                        // SUBN
+                        self.subn(x, y);
+                    }
+
+                    0xE => {
+                        // SHL
+                        self.shl(x);
+                    }
+
+                    _ => panic!("Reached unimplemented instruction {:#04X}", instruction),
+                }
             }
 
             0xA => {
@@ -208,7 +275,7 @@ impl Chip8 {
                 self.drw(x, y, n);
             }
 
-            _ => panic!("Reached unimplemented instruction"),
+            _ => panic!("Reached unimplemented instruction {:#04X}", instruction),
         }
 
         // Execute
@@ -226,17 +293,124 @@ impl Chip8 {
         self.pc = address;
     }
 
-    fn ld_imm(&mut self, target_register: u16, imm_value: u8) {
-        // 6xnn - LD Vx, nn
-        // Loads the immediate value nn into register Vx
-        self.v[target_register as usize] = imm_value;
+    fn se_imm(&mut self, target_register: usize, imm_value: u8) {
+        // 3xnn - SE Vx, nn
+        // Skip next instruction if Vx = nn
+        if self.v[target_register] == imm_value {
+            self.pc += 2;
+        }
     }
 
-    fn add_imm(&mut self, target_register: u16, imm_value: u8) {
+    fn sne_imm(&mut self, target_register: usize, imm_value: u8) {
+        // 4xnn - SNE Vx, nn
+        // Skip next instruction if Vx != nn
+        if self.v[target_register] != imm_value {
+            self.pc += 2;
+        }
+    }
+
+    fn se(&mut self, x_register: usize, y_register: usize) {
+        // 5xy0 - SE Vx, Vy
+        // Skip next instruction if Vx = Vy
+        if self.v[x_register] == self.v[y_register] {
+            self.pc += 2;
+        }
+    }
+
+    fn ld_imm(&mut self, target_register: usize, imm_value: u8) {
+        // 6xnn - LD Vx, nn
+        // Loads the immediate value nn into register Vx
+        self.v[target_register] = imm_value;
+    }
+
+    fn add_imm(&mut self, target_register: usize, imm_value: u8) {
         // 7xnn - ADD Vx, nn
         // Adds the value nn to register Vx and stores it in Vx
         // Note: doesn't affect overflow flag
-        self.v[target_register as usize] += imm_value;
+        self.v[target_register] += imm_value;
+    }
+
+    fn ld(&mut self, x_register: usize, y_register: usize) {
+        // 8xy0 - LD Vx, Vy
+        // Set Vx = Vy
+        self.v[x_register] = self.v[y_register];
+    }
+
+    fn or(&mut self, x_register: usize, y_register: usize) {
+        // 8xy1 - OR Vx, Vy
+        // Set Vx = Vx OR Vy
+        self.v[x_register] |= self.v[y_register];
+    }
+
+    fn and(&mut self, x_register: usize, y_register: usize) {
+        // 8xy2 - AND Vx, Vy
+        // Set Vx = Vx AND Vy
+        self.v[x_register] &= self.v[y_register];
+    }
+
+    fn xor(&mut self, x_register: usize, y_register: usize) {
+        // 8xy3 - XOR Vx, Vy
+        // Set Vx = Vx XOR Vy
+        self.v[x_register] ^= self.v[y_register];
+    }
+
+    fn add(&mut self, x_register: usize, y_register: usize) {
+        // 8xy4 - ADD Vx, Vy
+        // Set Vx = Vx + Vy
+        // Set VF = carry
+        let (value, overflow) = self.v[x_register].overflowing_add(self.v[y_register]);
+        
+        if overflow {
+            self.v[0xF] = 1;
+        }
+
+        self.v[x_register] = value;
+    }
+
+    fn sub(&mut self, x_register: usize, y_register: usize) {
+        // 8xy5 - SUB Vx, Vy
+        // Set Vx = Vx - Vy
+        // Set VF = Not borrow (Vx <= Vy)
+        if self.v[x_register] > self.v[y_register] {
+            self.v[0xF] = 1;
+        }
+
+        self.v[x_register] = self.v[x_register].wrapping_sub(self.v[y_register]);
+    }
+
+    fn shr(&mut self, x_register: usize) {
+        // 8xy6 - SHR Vx
+        // Set Vx = Vx >> 1
+        // Set VF = LSB of X = 1
+
+        if (self.v[x_register] & 0b0000_0001) != 0 {
+            self.v[0xF] = 1
+        }
+
+        self.v[x_register] >>= 1;
+    }
+
+    fn subn(&mut self, x_register: usize, y_register: usize) {
+        // 8xy7 - SUBN Vx, Vy
+        // Set Vx = Vy - Vx
+        // Set VF = Not borrow (Vx <= Vy)
+        if self.v[x_register] > self.v[y_register] {
+            self.v[0xF] = 1;
+        }
+
+        self.v[x_register] = self.v[y_register].wrapping_sub(self.v[x_register]);
+    }
+
+    fn shl(&mut self, x_register: usize) {
+        // 8xy7 - SHL Vx
+        // Set Vx = Vx << 1
+        // Set VF = MSB of X = 1
+
+        if (self.v[x_register] & 0b1000_0000) != 0 {
+            self.v[0xF] = 1
+        }
+
+        self.v[x_register] >>= 1;
     }
 
     fn set_i(&mut self, address: u16) {
@@ -245,10 +419,14 @@ impl Chip8 {
         self.i = address;
     }
 
-    fn drw(&mut self, x_register: u16, y_register: u16, n_bytes: u16) {
+    fn drw(&mut self, x_register: usize, y_register: usize, n_bytes: u16) {
+        // Dxyn - DRW Vx, Vy, n
+        // Display n-byte sprite starting at memory location I at (Vx, Vy)
+        // Set VF = collision
+
         // Get starting coordinates with appropriate wrapping
-        let x_coord = self.v[x_register as usize] % 64;
-        let y_coord = self.v[y_register as usize] % 32;
+        let x_coord = self.v[x_register] % 64;
+        let y_coord = self.v[y_register] % 32;
 
         // Reset VF
         self.v[0xF] = 0;
@@ -263,19 +441,23 @@ impl Chip8 {
             for bit in 0..8 {
                 // Mask MSB and if set, flip pixel on display
                 if (sprite_data << bit) & 0b1000_0000 != 0 {
+                    // set_vf will be true if any writes turned a pixel off
                     set_vf |= self.display.flip_pixel(x_coord + bit, y_coord + n as u8);
                 }
 
+                // Check that sprite doesn't go off side of display
                 if x_coord + bit > 63 {
-                    break
+                    break;
                 }
             }
 
+            // Check that sprite doesn't go off bottom of display
             if y_coord + (n as u8) > 31 {
-                break
+                break;
             }
         }
 
+        // If needed, set VF
         if set_vf {
             self.v[0xF] = 1;
         }
@@ -285,7 +467,8 @@ impl Chip8 {
 fn main() {
     let mut cpu = Chip8::new();
 
-    let program_path = Path::new("ibm_logo.ch8");
+    // let program_path = Path::new("ibm_logo.ch8");
+    let program_path = Path::new("BC_test.ch8");
 
     cpu.load_ram_from_file(program_path)
         .expect("Failed to read file");
