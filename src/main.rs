@@ -275,6 +275,37 @@ impl Chip8 {
                 self.drw(x, y, n);
             }
 
+            0xF => {
+                match nn {
+                    0x1E => {
+                        // ADD I
+                        self.add_i(x);
+                    }
+
+                    0x29 => {
+                        // LD Font
+                        self.ld_f(x);
+                    }
+
+                    0x33 => {
+                        // LD bcd
+                        self.ld_bcd(x);
+                    }
+
+                    0x55 => {
+                        // LD into I
+                        self.ld_into_i(x);
+                    }
+
+                    0x65 => {
+                        // LD from I
+                        self.ld_from_i(x);
+                    }
+
+                    _ => panic!("Reached unimplemented instruction {:#04X}", instruction),
+                }
+            }
+
             _ => panic!("Reached unimplemented instruction {:#04X}", instruction),
         }
 
@@ -359,9 +390,11 @@ impl Chip8 {
         // Set Vx = Vx + Vy
         // Set VF = carry
         let (value, overflow) = self.v[x_register].overflowing_add(self.v[y_register]);
-        
+
         if overflow {
             self.v[0xF] = 1;
+        } else {
+            self.v[0xF] = 0;
         }
 
         self.v[x_register] = value;
@@ -373,6 +406,8 @@ impl Chip8 {
         // Set VF = Not borrow (Vx <= Vy)
         if self.v[x_register] > self.v[y_register] {
             self.v[0xF] = 1;
+        } else {
+            self.v[0xF] = 0;
         }
 
         self.v[x_register] = self.v[x_register].wrapping_sub(self.v[y_register]);
@@ -385,6 +420,8 @@ impl Chip8 {
 
         if (self.v[x_register] & 0b0000_0001) != 0 {
             self.v[0xF] = 1
+        } else {
+            self.v[0xF] = 0;
         }
 
         self.v[x_register] >>= 1;
@@ -394,8 +431,11 @@ impl Chip8 {
         // 8xy7 - SUBN Vx, Vy
         // Set Vx = Vy - Vx
         // Set VF = Not borrow (Vx <= Vy)
-        if self.v[x_register] > self.v[y_register] {
+
+        if self.v[y_register] > self.v[x_register] {
             self.v[0xF] = 1;
+        } else {
+            self.v[0xF] = 0;
         }
 
         self.v[x_register] = self.v[y_register].wrapping_sub(self.v[x_register]);
@@ -408,6 +448,8 @@ impl Chip8 {
 
         if (self.v[x_register] & 0b1000_0000) != 0 {
             self.v[0xF] = 1
+        } else {
+            self.v[0xF] = 0;
         }
 
         self.v[x_register] >>= 1;
@@ -460,6 +502,62 @@ impl Chip8 {
         // If needed, set VF
         if set_vf {
             self.v[0xF] = 1;
+        }
+    }
+
+    fn add_i(&mut self, x_register: usize) {
+        // Fx1E - ADD I, Vx
+        // Set I = I + Vx
+
+        self.i += self.v[x_register] as u16;
+    }
+
+
+    fn ld_f(&mut self, x_register: usize) {
+        // Fx29 - LD F, Vx
+        // Set I = location of sprite for digit Vx
+
+        // Index = base(0x050) + Vx * offset(0x5)
+        self.i = 0x050 + (self.v[x_register] as u16) * 0x005;
+    }
+
+    fn ld_bcd(&mut self, x_register: usize) {
+        // Fx33 - LD B, Vx
+        // Store BCD representation of Vx in memory locations I, I+1 and I+2
+
+        let mut value = self.v[x_register];
+
+        // Store least significant digit in I+2
+        self.ram[self.i as usize + 2] = value % 10;
+        value /= 10;
+
+        // Store second digit in I+1
+        self.ram[self.i as usize + 1] = value % 10;
+        value /= 10;
+
+        // Store most significant digit in I
+        self.ram[self.i as usize] = value % 10;
+    }
+
+    fn ld_into_i(&mut self, x_register: usize) {
+        // Fx55 - LD [I], Vx
+        // Stores registers V0 to Vx into memory starting at I
+
+        let start_address = self.i as usize;
+
+        for i in 0..=x_register {
+            self.ram[start_address + i] = self.v[i];
+        }
+    }
+
+    fn ld_from_i(&mut self, x_register: usize) {
+        // Fx65 - LD Vx, [I]
+        // Reads registers V0 to Vx from memory starting at I
+
+        let start_address = self.i as usize;
+
+        for i in 0..=x_register {
+            self.v[i] = self.ram[start_address + i]; 
         }
     }
 }
