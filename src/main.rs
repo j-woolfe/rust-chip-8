@@ -1,6 +1,8 @@
 mod constants;
 mod display;
 
+extern crate rand;
+
 use crate::constants::*;
 use crate::display::Display;
 use std::fs::File;
@@ -26,7 +28,7 @@ struct Chip8 {
 
     // Stack and stack pointer
     stack: [u16; 16],
-    sp: u8,
+    sp: usize,
 
     // Delay and sound timers
     dt: u8,
@@ -178,15 +180,20 @@ impl Chip8 {
 
                     0x00EE => {
                         // RET
-                        // TODO
+                        self.ret();
                     }
-                    _ => {}
+                    _ => panic!("Reached unimplemented instruction {:#04X}", instruction),
                 }
             }
 
             0x1 => {
                 // JP
                 self.jp(nnn);
+            }
+
+            0x2 => {
+                // CALL
+                self.call(nnn);
             }
 
             0x3 => {
@@ -265,15 +272,43 @@ impl Chip8 {
                 }
             }
 
+            0x9 => {
+                // SNE
+                self.sne(x, y);
+            }
+
             0xA => {
-                // SET Index
-                self.set_i(nnn);
+                // LD Index
+                self.ld_i_imm(nnn);
+            }
+
+            0xB => {
+                // JP to nnn + v0
+                self.jp_offset(nnn);
+            }
+
+            0xC => {
+                // RAND
+                self.rand(x, nn);
             }
 
             0xD => {
                 // DRW
                 self.drw(x, y, n);
             }
+
+            0xE => match nn {
+                0x9E => {
+                    // SKP
+                    self.skp(x);
+                }
+
+                0xA1 => {
+                    // SKNP
+                    self.sknp(x);
+                }
+                _ => panic!("Reached unimplemented instruction {:#04X}", instruction),
+            },
 
             0xF => {
                 match nn {
@@ -318,9 +353,24 @@ impl Chip8 {
         self.display.clear();
     }
 
+    fn ret(&mut self) {
+        // 00EE - RET
+        // Set PC to top value in Stack, Decrement SP
+        self.pc = self.stack[self.sp];
+        self.sp -= 1;
+    }
+
     fn jp(&mut self, address: u16) {
-        // 1nnn - JP addr
+        // 1nnn - JP nnn
         // Sets program counter to nnn
+        self.pc = address;
+    }
+
+    fn call(&mut self, address: u16) {
+        // 1nnn - CALL nnn
+        // Increment SP, Push current PC to stack, Set program counter to nnn
+        self.sp += 1;
+        self.stack[self.sp] = self.pc;
         self.pc = address;
     }
 
@@ -354,11 +404,11 @@ impl Chip8 {
         self.v[target_register] = imm_value;
     }
 
-    fn add_imm(&mut self, target_register: usize, imm_value: u8) {
+    fn add_imm(&mut self, x_register: usize, imm_value: u8) {
         // 7xnn - ADD Vx, nn
         // Adds the value nn to register Vx and stores it in Vx
         // Note: doesn't affect overflow flag
-        self.v[target_register] += imm_value;
+        self.v[x_register] = self.v[x_register].wrapping_add(imm_value);
     }
 
     fn ld(&mut self, x_register: usize, y_register: usize) {
@@ -455,10 +505,31 @@ impl Chip8 {
         self.v[x_register] >>= 1;
     }
 
-    fn set_i(&mut self, address: u16) {
+    fn sne(&mut self, x_register: usize, y_register: usize) {
+        // 9xy0 - SNE Vx, Vy
+        // Skip next instruction if Vx != Vy
+        if self.v[x_register] != self.v[y_register] {
+            self.pc += 2;
+        }
+    }
+
+    fn ld_i_imm(&mut self, address: u16) {
         // Annn - LD I, addr
         // Sets Index register to addr
         self.i = address;
+    }
+
+    fn jp_offset(&mut self, address: u16) {
+        // Bnnn - JP to nnn + V0
+        // Set PC to nnn + V0
+        self.pc = address + (self.v[0x0] as u16);
+    }
+
+    fn rand(&mut self, x_register: usize, imm_value: u8) {
+        // Cxnn - RAND Vx, nn
+        // Set Vx to a random 8-bit number ANDed with nn
+        let rand_val: u8 = rand::random();
+        self.v[x_register] = rand_val & imm_value;
     }
 
     fn drw(&mut self, x_register: usize, y_register: usize, n_bytes: u16) {
@@ -505,13 +576,28 @@ impl Chip8 {
         }
     }
 
+    fn skp(&mut self, x_register: usize) {
+        // Ex9E - SKP Vx
+        // Skip next instruction if key with value Vx is pressed
+        if self.display.check_key(self.v[x_register]) {
+            self.pc += 2;
+        }
+    }
+
+    fn sknp(&mut self, x_register: usize) {
+        // ExA1 - SKNP Vx
+        // Skip next instruction if key with value Vx is not pressed
+        if !self.display.check_key(self.v[x_register]) {
+            self.pc += 2;
+        }
+    }
+
     fn add_i(&mut self, x_register: usize) {
         // Fx1E - ADD I, Vx
         // Set I = I + Vx
 
         self.i += self.v[x_register] as u16;
     }
-
 
     fn ld_f(&mut self, x_register: usize) {
         // Fx29 - LD F, Vx
@@ -557,7 +643,7 @@ impl Chip8 {
         let start_address = self.i as usize;
 
         for i in 0..=x_register {
-            self.v[i] = self.ram[start_address + i]; 
+            self.v[i] = self.ram[start_address + i];
         }
     }
 }
@@ -566,7 +652,8 @@ fn main() {
     let mut cpu = Chip8::new();
 
     // let program_path = Path::new("ibm_logo.ch8");
-    let program_path = Path::new("BC_test.ch8");
+    // let program_path = Path::new("BC_test.ch8");
+    let program_path = Path::new("test_opcode.ch8");
 
     cpu.load_ram_from_file(program_path)
         .expect("Failed to read file");

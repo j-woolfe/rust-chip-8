@@ -1,5 +1,3 @@
-- Write Fetch
-    - Write Read ram
-- Write Decode
-    - Get X, Y, N, NN and NNN
-- Write Execute
+- LD DT (Delay timer)
+- LD ST (Sound timer)
+- LD Key (Blocking keyboard input)

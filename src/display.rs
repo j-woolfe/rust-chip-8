@@ -136,6 +136,28 @@ impl Display {
         self.draw_frame();
     }
 
+    pub fn check_key(&self, key: u8) -> bool{
+        match key {
+            0x0 => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::Num0),
+            0x1 => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::Num1),
+            0x2 => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::Num2),
+            0x3 => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::Num3),
+            0x4 => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::Num4),
+            0x5 => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::Num5),
+            0x6 => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::Num6),
+            0x7 => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::Num7),
+            0x8 => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::Num8),
+            0x9 => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::Num9),
+            0xA => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::A),
+            0xB => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::B),
+            0xC => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::C),
+            0xD => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::D),
+            0xE => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::E),
+            0xF => self.event_pump.keyboard_state().is_scancode_pressed(Scancode::F),
+            _ => panic!("Invalid hex value passed to check_key()")
+        }
+    }
+
     pub fn get_keys(&self) -> Vec<ValidHex> {
         let mut pressed_keys = Vec::new();
 
